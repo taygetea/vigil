@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>vigil</title>
+<style>
+  @font-face { font-family: 'Garamond'; src: url('../assets/fonts/EBGaramond.ttf'); }
+  @font-face { font-family: 'CourierPrime'; src: url('../assets/fonts/CourierPrime.ttf'); }
+  html, body { margin: 0; background: #000; height: 100%; }
+  #stage { display: block; margin: 0 auto; }
+  #hud { position: fixed; left: 0; right: 0; bottom: 0; padding: 8px 14px;
+         font: 13px monospace; color: #b9a684; background: rgba(0,0,0,.55);
+         display: flex; gap: 16px; align-items: center; user-select: none; }
+  #hud input[type=range] { flex: 1; accent-color: #c98c2e; }
+  body.export #hud { display: none; }
+</style>
+</head>
+<body>
+<canvas id="stage" width="1280" height="720"></canvas>
+<div id="hud">
+  <span id="playbtn" style="cursor:pointer">&#9654; play</span>
+  <input type="range" id="seek" min="0" max="1000" value="0">
+  <span id="clock">0:00</span>
+  <span id="secname"></span>
+</div>
+<script src="vigil.js"></script>
+</body>
+</html>

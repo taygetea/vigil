@@ -69,7 +69,9 @@ const chrome = spawn("chromium", [
 
 function cleanup() {
   chrome.kill(); server.kill();
-  fs.rmSync(profile, { recursive: true, force: true });
+  // chromium releases profile files asynchronously after SIGTERM; retry
+  fs.rmSync(profile, { recursive: true, force: true,
+                       maxRetries: 8, retryDelay: 150 });
 }
 process.on("exit", cleanup);
 process.on("SIGINT", () => process.exit(130));

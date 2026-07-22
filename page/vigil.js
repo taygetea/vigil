@@ -21,6 +21,8 @@ if (EXPORT) document.body.classList.add("export");
 let M = null;                           // manifest
 let textLines = [];                     // lines sung by a lead voice
 let klattschSpans = [];                 // [t0, t1] where the ancestor sings
+let C = null;                           // commentary cut (cold open/epilogue)
+let songT0 = 0, songT1 = 0;             // where the song itself lives in t
 
 // ---------------------------------------------------------------- helpers
 
@@ -91,9 +93,12 @@ function gutter(t) {
 function drawFlame(t) {
   const e = env(t, M.env.vox_smooth);
   const transient = clamp(env(t, M.env.vox) - e, 0, 1);
-  const b = sectionBrightness(t);
+  let b = sectionBrightness(t);
   const g = gutter(t);
-  const calm = smoothstep(M.duration_s - 14, M.duration_s - 4, t); // ember calm
+  const calm = smoothstep(songT1 - 14, songT1 - 4, t);      // ember calm
+  // commentary cut: the candle is unlit until the song starts
+  const lit = C ? smoothstep(songT0 - 0.3, songT0 + 1.9, t) : 1;
+  b *= 0.3 + 0.7 * lit;
 
   const speed = (1 + 1.9 * g + 1.2 * transient) * (1 - 0.55 * calm);
   const h = (92 + 78 * e) * (0.8 + 0.34 * b) * (1 - 0.52 * g) * (1 - 0.45 * calm);
@@ -103,15 +108,17 @@ function drawFlame(t) {
   const flick = 0.92 + 0.08 * fbm(t * 7.3 * speed + 3.3);
 
   // room glow
-  const glowR = (300 + 200 * e) * b * (1 - 0.4 * g) * (1 - 0.5 * calm) + 90;
-  const gy = BASE_Y - h * 0.55;
-  let grad = ctx.createRadialGradient(CX, gy, 10, CX, gy, glowR);
-  const warmth = 1 - 0.55 * g;
-  grad.addColorStop(0, `rgba(255,${Math.round(168 * warmth + 40)},${Math.round(60 * warmth + 60 * g)},${0.30 * b * flick})`);
-  grad.addColorStop(0.5, `rgba(210,${Math.round(120 * warmth + 30)},30,${0.10 * b})`);
-  grad.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
+  const glowR = ((300 + 200 * e) * b * (1 - 0.4 * g) * (1 - 0.5 * calm) + 90) * lit;
+  if (glowR > 14) {   // r1 <= r0 inverts the gradient and washes the frame
+    const gy = BASE_Y - h * 0.55;
+    let grad = ctx.createRadialGradient(CX, gy, 10, CX, gy, glowR);
+    const warmth = 1 - 0.55 * g;
+    grad.addColorStop(0, `rgba(255,${Math.round(168 * warmth + 40)},${Math.round(60 * warmth + 60 * g)},${0.30 * b * flick})`);
+    grad.addColorStop(0.5, `rgba(210,${Math.round(120 * warmth + 30)},30,${0.10 * b})`);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   // candle body
   const wax = ctx.createLinearGradient(CX - 44, 0, CX + 44, 0);
@@ -132,6 +139,22 @@ function drawFlame(t) {
   ctx.moveTo(CX, BASE_Y + 6);
   ctx.lineTo(CX + lean * 0.06, BASE_Y - 12);
   ctx.stroke();
+
+  // pre-ignition: a thread of smoke instead of a flame
+  if (lit < 0.65 && t > 0.5) {
+    ctx.save();
+    ctx.strokeStyle = `rgba(150,150,162,${0.11 * (1 - lit)})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let y = 0; y <= 130; y += 6) {
+      const x = CX + (fbm(y * 0.02 + t * 0.35) - 0.5) * (6 + y * 0.5);
+      const yy = BASE_Y - 14 - y;
+      y === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (lit < 0.02) return;
 
   const tipX = CX + lean, tipY = BASE_Y - h;
   function tongue(scale, fill) {
@@ -214,7 +237,8 @@ function drawLyrics(t) {
 
 function drawCards(t) {
   const intro = M.sections[0];
-  const a1 = smoothstep(1.2, 3.2, t) * (1 - smoothstep(intro.t1 - 3.5, intro.t1 - 1, t));
+  const a1 = smoothstep(intro.t0 + 1.2, intro.t0 + 3.2, t)
+           * (1 - smoothstep(intro.t1 - 3.5, intro.t1 - 1, t));
   if (a1 > 0.01) {
     ctx.save();
     ctx.globalAlpha = a1;
@@ -234,7 +258,8 @@ function drawCards(t) {
 }
 
 function drawEndCard(t) {
-  const a = smoothstep(M.duration_s - 8.5, M.duration_s - 5.5, t);
+  const a = smoothstep(songT1 - 8.5, songT1 - 5.5, t)
+          * (C ? 1 - smoothstep(songT1 + 1.5, songT1 + 3.0, t) : 1);
   if (a <= 0.01) return;
   ctx.save();
   ctx.globalAlpha = a;
@@ -253,6 +278,26 @@ function drawEndCard(t) {
 
 // ---------------------------------------------------------------- frame
 
+function drawCommentary(t) {
+  if (!C) return;
+  for (const card of [...C.prologue, ...C.epilogue]) {
+    const a = smoothstep(card.t0, card.t0 + 0.7, t)
+            * (1 - smoothstep(card.t1 - 0.4, card.t1 + 0.3, t));
+    if (a <= 0.01) continue;
+    const mono = card.style === "ancestor";
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = mono ? "27px CourierPrime" : "26px Garamond";
+    ctx.fillStyle = mono ? "#d7e3ee" : "#b7a888";
+    const lines = card.text.split("\n");
+    lines.forEach((ln, i) => {
+      ctx.fillText(ln, CX - ctx.measureText(ln).width / 2,
+                   320 + (i - (lines.length - 1) / 2) * 38);
+    });
+    ctx.restore();
+  }
+}
+
 function renderFrame(t) {
   ctx.fillStyle = "#070503";
   ctx.fillRect(0, 0, W, H);
@@ -260,6 +305,7 @@ function renderFrame(t) {
   drawLyrics(t);
   drawCards(t);
   drawEndCard(t);
+  drawCommentary(t);
   return true;
 }
 window.renderFrame = renderFrame;
@@ -269,6 +315,9 @@ window.renderFrame = renderFrame;
 window.vigilReady = (async () => {
   const r = await fetch(`../songs/${SONG}/manifest.json`);
   M = await r.json();
+  C = M.commentary || null;
+  songT0 = C ? C.song_t0 : 0;
+  songT1 = C ? C.song_t1 : M.duration_s;
   textLines = M.lines.filter(l => M.lead_voices.includes(l.voice));
   klattschSpans = M.lines.filter(l => l.voice === "klattsch")
                          .map(l => [l.t0, l.t1]);

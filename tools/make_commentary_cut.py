@@ -84,6 +84,23 @@ for ln in man["lines"]:
         w["t0"] = round(w["t0"] + PRO, 3)
         w["t1"] = round(w["t1"] + PRO, 3)
 
+for h in man.get("harmony", []):
+    h["t0"] = round(h["t0"] + PRO, 3)
+    h["t1"] = round(h["t1"] + PRO, 3)
+for ph in man.get("phonemes", []):
+    ph["t0"] = round(ph["t0"] + PRO, 3)
+    ph["t1"] = round(ph["t1"] + PRO, 3)
+for tr in man.get("band", {}).get("tracks", []):
+    for nt in tr["notes"]:
+        nt["t0"] = round(nt["t0"] + PRO, 3)
+        nt["t1"] = round(nt["t1"] + PRO, 3)
+for h in man.get("band", {}).get("drums", []):
+    h["t0"] = round(h["t0"] + PRO, 3)
+if "f0" in man:
+    r = int(man["f0"]["rate"])
+    man["f0"]["hz"] = ([0.0] * int(PRO * r) + man["f0"]["hz"]
+                       + [0.0] * int(EPI * r))
+
 rate = man["env_rate"]
 pre, post = int(PRO * rate), int(EPI * rate)
 man["env"]["vox"] = [0.0] * pre + man["env"]["vox"] + [0.0] * post
